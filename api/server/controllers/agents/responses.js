@@ -32,6 +32,7 @@ const {
   createSubagentUsageSink,
   getTransactionsConfig,
   resolveAgentTokenConfig,
+  createAgentBalanceChargeFactorResolver,
   resolveSubagentGraphs,
   inspectContent,
   extractAgentContent,
@@ -1071,6 +1072,17 @@ const executeResponse = async (envelope, { req, res }) => {
         }
       }
       const modelBoundAgents = [...modelBoundAgentsById.values()];
+      /** Each agent's provider, so a usage row is charged at its own agent's
+       *  BYOK factor — a graph may mix user-provided and operator-paid agents. */
+      const endpointByAgentId = new Map();
+      for (const [agentId, agentConfig] of modelBoundAgentsById) {
+        endpointByAgentId.set(agentId, agentConfig.endpoint);
+      }
+      const resolveBalanceChargeFactor = createAgentBalanceChargeFactorResolver({
+        appConfig,
+        endpointByAgentId,
+        fallbackEndpoint: primaryConfig.endpoint,
+      });
       const mergedMCPAuthMap = discoveredMCPAuthMap ?? primaryConfig.userMCPAuthMap;
       assertModelBoundContent({
         onTraversalFailure: reportLocatorTraversalFailure,
@@ -1417,6 +1429,7 @@ const executeResponse = async (envelope, { req, res }) => {
               model: primaryConfig.model || agent.model_parameters?.model,
               endpointTokenConfig: primaryConfig.endpointTokenConfig,
               resolveEndpointTokenConfig,
+              resolveBalanceChargeFactor,
             },
           ).catch((err) => {
             logger.error('[Responses API] Error recording usage:', getSafeErrorMetadata(err));
@@ -1656,6 +1669,7 @@ const executeResponse = async (envelope, { req, res }) => {
               model: primaryConfig.model || agent.model_parameters?.model,
               endpointTokenConfig: primaryConfig.endpointTokenConfig,
               resolveEndpointTokenConfig,
+              resolveBalanceChargeFactor,
             },
           ).catch((err) => {
             logger.error('[Responses API] Error recording usage:', getSafeErrorMetadata(err));

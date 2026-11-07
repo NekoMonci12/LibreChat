@@ -3,6 +3,7 @@ import type { TEndpointsConfig } from './types';
 import {
   allowedAddressesSchema,
   agentsEndpointSchema,
+  balanceSchema,
   BASE_ONLY_CONFIG_PATHS,
   BASE_ONLY_CONFIG_SECTIONS,
   DEPLOYMENT_ONLY_CONFIG_PATHS,
@@ -3249,6 +3250,29 @@ describe('agent recursion limits', () => {
       expect(agentsEndpointSchema.parse({})[field as 'recursionLimit']).toBeUndefined();
     },
   );
+});
+
+describe('BYOK balance charging', () => {
+  it('leaves a BYOK request free and admitted by default', () => {
+    const parsed = balanceSchema.parse({});
+    expect(parsed.byokChargePercent).toBe(0);
+    expect(parsed.byokBypassBalanceCheck).toBe(true);
+  });
+
+  it('charges the configured percent of the standard cost', () => {
+    expect(balanceSchema.parse({ byokChargePercent: 40 }).byokChargePercent).toBe(40);
+  });
+
+  it('rejects a percent outside the valid range', () => {
+    expect(balanceSchema.safeParse({ byokChargePercent: 101 }).success).toBe(false);
+    expect(balanceSchema.safeParse({ byokChargePercent: -1 }).success).toBe(false);
+  });
+
+  it('keeps the balance check for a BYOK request when the bypass is disabled', () => {
+    expect(balanceSchema.parse({ byokBypassBalanceCheck: false }).byokBypassBalanceCheck).toBe(
+      false,
+    );
+  });
 });
 
 describe('DEPLOYMENT_ONLY_CONFIG_PATHS', () => {

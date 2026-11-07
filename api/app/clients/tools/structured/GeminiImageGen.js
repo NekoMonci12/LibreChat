@@ -11,6 +11,7 @@ const {
   getBalanceConfig,
   getEnvProxyDispatcher,
   getTransactionsConfig,
+  resolveToolBalanceChargeFactor,
 } = require('@librechat/api');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 const { spendTokens, getFiles } = require('~/models');
@@ -251,8 +252,17 @@ function checkForSafetyBlock(response) {
  * @param {string} params.conversationId - The conversation ID
  * @param {string} params.model - The model name
  * @param {string} [params.messageId] - The response message ID for transaction correlation
+ * @param {number} [params.balanceChargeFactor] - Fraction of the standard cost charged
  */
-async function recordTokenUsage({ usageMetadata, req, userId, conversationId, model, messageId }) {
+async function recordTokenUsage({
+  usageMetadata,
+  req,
+  userId,
+  conversationId,
+  model,
+  messageId,
+  balanceChargeFactor,
+}) {
   if (!usageMetadata) {
     logger.debug('[GeminiImageGen] No usage metadata available for balance tracking');
     return;
@@ -293,6 +303,7 @@ async function recordTokenUsage({ usageMetadata, req, userId, conversationId, mo
         context: 'image_generation',
         balance,
         transactions,
+        balanceChargeFactor,
       },
       {
         promptTokens,
@@ -317,6 +328,16 @@ function createGeminiImageTool(fields = {}) {
   }
 
   const { req, imageFiles = [], userId, fileStrategy, GEMINI_API_KEY, GOOGLE_KEY } = fields;
+  /** The resolved credential fields, so the usage can be charged at the
+   *  user's rate when their own key paid for the call. */
+  const authValues = fields.authValues ?? { GEMINI_API_KEY, GOOGLE_KEY };
+  /** The tool runs on whichever credential the user supplied, so its cost is
+   *  charged at the BYOK rate when that credential is the user's own. */
+  const balanceChargeFactor = resolveToolBalanceChargeFactor({
+    authValues,
+    authFieldOrder: ['GEMINI_API_KEY', 'GOOGLE_KEY'],
+    balanceConfig: getBalanceConfig(req?.config),
+  });
 
   const imageOutputType = fields.imageOutputType || EImageOutputType.PNG;
 
@@ -456,6 +477,7 @@ function createGeminiImageTool(fields = {}) {
         messageId,
         conversationId,
         model: geminiModel,
+        balanceChargeFactor,
       }).catch((error) => {
         logger.error('[GeminiImageGen] Failed to record token usage:', error);
       });

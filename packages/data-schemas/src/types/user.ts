@@ -137,6 +137,10 @@ export interface BalanceConfig {
   refillAmount?: number;
   refillMode?: BalanceRefillMode;
   reservationTtlMs?: number;
+  /** Percent of the standard cost charged for requests whose credentials the user provided. */
+  byokChargePercent?: number;
+  /** Whether the pre-flight balance check is skipped for user-provided credentials. */
+  byokBypassBalanceCheck?: boolean;
 }
 
 export interface CreateUserRequest extends Partial<IUser> {

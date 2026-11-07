@@ -2,6 +2,35 @@ import logger from '~/config/winston';
 
 export const CANCEL_RATE = 1.15;
 
+/**
+ * The fraction of the standard cost a transaction is charged, clamped to
+ * `[0, 1]`. A request whose credentials the user provided is charged at the
+ * BYOK fraction, so `1` (the full standard cost) is the default.
+ */
+export function getBalanceChargeFactor(factor?: number): number {
+  if (typeof factor !== 'number' || !Number.isFinite(factor)) {
+    return 1;
+  }
+  return Math.min(1, Math.max(0, factor));
+}
+
+/**
+ * Scales a transaction's computed token value by its charge factor. The
+ * standard `rate` is left untouched, so the real cost of the call stays
+ * derivable as `rawAmount * rate` while the charged amount is what debits the
+ * balance.
+ */
+export function applyBalanceChargeFactor(txn: {
+  tokenValue?: number;
+  balanceChargeFactor?: number;
+}): void {
+  const factor = getBalanceChargeFactor(txn.balanceChargeFactor);
+  if (factor === 1) {
+    return;
+  }
+  txn.tokenValue = (txn.tokenValue ?? 0) * factor;
+}
+
 const TRANSACTION_PROBE_COLLECTION = '__transaction_test__';
 
 async function probeTransaction(mongoose: typeof import('mongoose')): Promise<boolean> {

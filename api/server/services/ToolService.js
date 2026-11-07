@@ -73,6 +73,7 @@ const {
   LIST_WORKSPACE_FILES_TOOL_NAME,
   SEARCH_WORKSPACE_TOOL_NAME,
   getTransactionsConfig,
+  resolveEndpointBalancePolicy,
   checkToolRolePermission,
   resolveToolRolePermissions,
   splitAssistantMCPToolResult,
@@ -370,11 +371,19 @@ const processVisionRequest = async (client, currentAction) => {
   /** @type {ChatCompletion | undefined} */
   const completion = await client.visionPromise;
   if (completion && completion.usage) {
+    /** The vision call runs on the same credentials as the request, so it is
+     *  charged at the same rate. */
+    const { balanceChargeFactor } = resolveEndpointBalancePolicy({
+      endpoint: client.req.body.endpoint,
+      appConfig: client.req.config,
+      model: client.req.body.model,
+    });
     recordUsage({
       user: client.req.user.id,
       model: client.req.body.model,
       conversationId: (client.responseMessage ?? client.finalMessage).conversationId,
       ...completion.usage,
+      balanceChargeFactor,
       transactions: getTransactionsConfig(client.req.config),
     });
   }

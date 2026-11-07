@@ -329,6 +329,8 @@ jest.mock('@librechat/api', () => ({
   resolveAgentTokenConfig: jest.fn(({ agentId, byAgentId, fallback }) =>
     agentId != null && byAgentId?.has(agentId) ? byAgentId.get(agentId) : fallback,
   ),
+  /** Full standard cost: these specs assert usage recording, not BYOK pricing. */
+  createAgentBalanceChargeFactorResolver: jest.fn(() => () => 1),
   extractManualSkills: jest.fn().mockReturnValue(undefined),
   injectSkillPrimes: jest.fn().mockReturnValue({
     initialMessages: [],

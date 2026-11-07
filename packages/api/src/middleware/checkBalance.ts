@@ -26,6 +26,18 @@ interface TxData {
   amount: number;
   endpointTokenConfig?: unknown;
   generations?: unknown[];
+  /**
+   * Fraction of the standard cost this request is charged, between 0 and 1.
+   * A request whose credentials the user provided is charged at the BYOK
+   * fraction, so the amount reserved here matches what is later debited.
+   */
+  balanceChargeFactor?: number;
+  /**
+   * Whether the pre-flight check is skipped entirely. A request the operator
+   * does not pay for is admitted unconditionally, so an exhausted balance
+   * cannot block it.
+   */
+  bypassBalanceCheck?: boolean;
 }
 
 export interface CheckBalanceDeps {
@@ -200,7 +212,17 @@ export async function checkBalance(
   { req, res, txData }: { req: ServerRequest; res: Response; txData: TxData },
   deps: CheckBalanceDeps,
 ): Promise<BalanceReservation> {
-  const { user, model, endpoint, valueKey, tokenType, amount, endpointTokenConfig } = txData;
+  const {
+    user,
+    model,
+    endpoint,
+    valueKey,
+    tokenType,
+    amount,
+    endpointTokenConfig,
+    balanceChargeFactor,
+    bypassBalanceCheck,
+  } = txData;
   const multiplier = deps.getMultiplier({
     valueKey,
     tokenType,
@@ -208,7 +230,11 @@ export async function checkBalance(
     endpoint,
     endpointTokenConfig,
   });
-  const tokenCost = amount * multiplier;
+  const chargeFactor =
+    typeof balanceChargeFactor === 'number' && Number.isFinite(balanceChargeFactor)
+      ? Math.min(1, Math.max(0, balanceChargeFactor))
+      : 1;
+  const tokenCost = amount * multiplier * chargeFactor;
   const reservationId = randomUUID();
   const ttlMs = getReservationTtlMs(deps.balanceConfig);
 
@@ -220,9 +246,20 @@ export async function checkBalance(
     tokenType,
     amount,
     multiplier,
+    chargeFactor,
     tokenCost,
     endpointTokenConfig: !!endpointTokenConfig,
   });
+
+  /**
+   * A request the operator does not pay for is admitted unconditionally: no
+   * credits are held, so there is nothing to release later. The short circuit
+   * matters — a zero-cost reservation would still fail admission for a user
+   * with no balance record, which is exactly the case the bypass exists for.
+   */
+  if (bypassBalanceCheck === true || chargeFactor === 0) {
+    return { release: async () => undefined };
+  }
 
   const expiresAt = new Date(Date.now() + ttlMs);
   let refillPolicy: BalanceReservationRequest['refillPolicy'];

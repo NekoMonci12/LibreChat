@@ -40,6 +40,7 @@ const {
   createSubagentUsageSink,
   getTransactionsConfig,
   resolveAgentTokenConfig,
+  createAgentBalanceChargeFactorResolver,
   resolveRecursionLimit,
   inspectContent,
   extractMessageContent,
@@ -814,6 +815,17 @@ const executeOpenAIChatCompletion = async (envelope, { req, res }) => {
           pendingModelBoundAgents.push(...graph.memberConfigs);
         }
       }
+      /** Each agent's provider, so a usage row is charged at its own agent's
+       *  BYOK factor — a graph may mix user-provided and operator-paid agents. */
+      const endpointByAgentId = new Map();
+      for (const [agentId, agentConfig] of modelBoundAgentsById) {
+        endpointByAgentId.set(agentId, agentConfig.endpoint);
+      }
+      const resolveBalanceChargeFactor = createAgentBalanceChargeFactorResolver({
+        appConfig,
+        endpointByAgentId,
+        fallbackEndpoint: primaryConfig.endpoint,
+      });
       const modelBoundAgents = [...modelBoundAgentsById.values()];
       const manualSkillPrimes = primaryConfig.manualSkillPrimes;
       const alwaysApplySkillPrimes = primaryConfig.alwaysApplySkillPrimes;
@@ -1196,6 +1208,7 @@ const executeOpenAIChatCompletion = async (envelope, { req, res }) => {
               model: primaryConfig.model || agent.model_parameters?.model,
               endpointTokenConfig: primaryConfig.endpointTokenConfig,
               resolveEndpointTokenConfig,
+              resolveBalanceChargeFactor,
             },
           ).catch((err) => {
             logger.error('[OpenAI API] Error recording usage:', getSafeErrorMetadata(err));

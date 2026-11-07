@@ -12,6 +12,7 @@ import type {
   IBalance,
 } from '~/types';
 import type { ITransaction } from '~/schema/transaction';
+import { applyBalanceChargeFactor } from '~/utils/transactions';
 import { tenantSafeBulkWrite } from '~/utils/tenantBulkWrite';
 import logger from '~/config/winston';
 
@@ -52,6 +53,8 @@ interface InternalTxDoc {
   /** Subset of `writeTokens` written to the 1-hour cache */
   write1hTokens?: number;
   readTokens?: number;
+  /** Fraction of the standard cost this transaction is charged, between 0 and 1. */
+  balanceChargeFactor?: number;
 }
 
 /** Input data for creating a transaction */
@@ -72,6 +75,8 @@ export interface TxData {
   readTokens?: number;
   balance?: { enabled?: boolean };
   transactions?: { enabled?: boolean };
+  /** Fraction of the standard cost this transaction is charged, between 0 and 1. */
+  balanceChargeFactor?: number;
 }
 
 /** Return value from a successful transaction that also updates the balance */
@@ -139,12 +144,14 @@ export function createTransactionMethods(
       txn.tokenValue = Math.ceil((txn.tokenValue ?? 0) * cancelRate);
       txn.rate = (txn.rate ?? 0) * cancelRate;
     }
+    applyBalanceChargeFactor(txn);
   }
 
   /** Calculate token value for structured tokens */
   function calculateStructuredTokenValue(txn: InternalTxDoc) {
     if (!txn.tokenType) {
       txn.tokenValue = txn.rawAmount;
+      applyBalanceChargeFactor(txn);
       return;
     }
 
@@ -233,6 +240,7 @@ export function createTransactionMethods(
         );
       }
     }
+    applyBalanceChargeFactor(txn);
   }
 
   /**

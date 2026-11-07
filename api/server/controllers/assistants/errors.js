@@ -27,6 +27,7 @@ const { getConvo } = require('~/models');
  * @property {Express.Response} res - The Express response object
  * @property {() => ErrorHandlerContext} getContext - Function to get the current context
  * @property {string} [originPath] - The origin path for the error handler
+ * @property {number} [balanceChargeFactor] - Fraction of the standard cost the run's usage is charged
  */
 
 /**
@@ -34,7 +35,13 @@ const { getConvo } = require('~/models');
  * @param {ErrorHandlerDependencies} dependencies - The dependencies for the error handler
  * @returns {(error: Error) => Promise<void>} The error handler function
  */
-const createErrorHandler = ({ req, res, getContext, originPath = '/assistants/chat/' }) => {
+const createErrorHandler = ({
+  req,
+  res,
+  getContext,
+  originPath = '/assistants/chat/',
+  balanceChargeFactor,
+}) => {
   const cache = getLogStores(CacheKeys.ABORT_KEYS);
 
   /**
@@ -125,6 +132,7 @@ const createErrorHandler = ({ req, res, getContext, originPath = '/assistants/ch
         model: run.model,
         user: req.user.id,
         conversationId,
+        balanceChargeFactor,
         transactions: getTransactionsConfig(req.config),
       });
     } catch (error) {

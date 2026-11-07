@@ -4030,6 +4030,18 @@ export const balanceSchema = z
       .default(DEFAULT_BALANCE_RESERVATION_TTL_MS),
     /** How the UI presents the balance; `credits` keeps the raw figure. */
     display: z.enum(BALANCE_DISPLAY_MODES).optional().default('credits'),
+    /**
+     * Percent of the standard cost charged for requests whose credentials the
+     * user provided (`user_provided`). `0` makes those requests free, since the
+     * operator does not pay the provider bill for them.
+     */
+    byokChargePercent: z.number().min(0).max(100).optional().default(0),
+    /**
+     * Whether the pre-flight balance check is skipped for user-provided
+     * credentials. A request the operator does not pay for is not blocked by an
+     * exhausted balance.
+     */
+    byokBypassBalanceCheck: z.boolean().optional().default(true),
   })
   .superRefine((balance, ctx) => {
     if (

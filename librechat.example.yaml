@@ -503,6 +503,9 @@ registration:
 #   refillMode: 'add' # 'reset' replaces the allowance each period without rollover
 #   reservationTtlMs: 1800000  # How long an in-flight request's reserved credits count if never released
 #   display: 'credits'  # credits | currency (uses interface.currency) | percent (share of the allotment used)
+#   # Requests whose credentials the user provided (BYOK) cost the operator nothing.
+#   byokChargePercent: 0  # Percent of the standard cost charged for such requests (0-100)
+#   byokBypassBalanceCheck: true  # Admit them even when the balance is exhausted
 
 # Example Transactions settings
 # Controls whether to save transaction records to the database

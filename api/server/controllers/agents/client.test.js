@@ -832,6 +832,7 @@ describe('AgentClient - detached subagent usage', () => {
       transactions,
       endpointTokenConfig: { input: 3, output: 4 },
       endpointTokenConfigByAgentId: expect.any(Map),
+      resolveBalanceChargeFactor: expect.any(Function),
     });
     expect(billing.endpointTokenConfigByAgentId.get('agent-child')).toBe(childTokenConfig);
     expect(mockDetachedUsageRecorder).toHaveBeenCalledWith(usage);

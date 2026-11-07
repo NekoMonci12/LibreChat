@@ -867,6 +867,14 @@ export interface RecordUsageParams {
    * callers (responses.js / openai.js) omit it and use `endpointTokenConfig`.
    */
   resolveEndpointTokenConfig?: (usage: UsageMetadata) => EndpointTokenConfig | undefined;
+  /**
+   * Per-usage charge factor for multi-endpoint graphs. Called with each usage
+   * item; the result is the fraction of the standard cost that usage is
+   * charged (0 when the user provided the credentials). When provided it is
+   * authoritative, including `1` for a known agent the operator pays for.
+   * Single-config callers omit it and are charged the full standard cost.
+   */
+  resolveBalanceChargeFactor?: (usage: UsageMetadata) => number;
 }
 
 export interface RecordUsageResult {
@@ -883,6 +891,8 @@ export interface DetachedSubagentUsageRecorderParams {
   transactions?: Partial<TTransactionsConfig>;
   endpointTokenConfig?: EndpointTokenConfig;
   endpointTokenConfigByAgentId?: Map<string, EndpointTokenConfig | undefined>;
+  /** Per-usage charge factor resolver, mirroring the endpoint token config one. */
+  resolveBalanceChargeFactor?: (usage: UsageMetadata) => number;
 }
 
 /**
@@ -906,6 +916,7 @@ export async function recordCollectedUsage(
     collectedUsage,
     endpointTokenConfig,
     resolveEndpointTokenConfig,
+    resolveBalanceChargeFactor,
     context = 'message',
   } = params;
 
@@ -972,6 +983,9 @@ export async function recordCollectedUsage(
         endpointTokenConfig: resolveEndpointTokenConfig
           ? resolveEndpointTokenConfig(usage)
           : endpointTokenConfig,
+        /** Charge this usage at its own agent's factor: a graph may mix
+         *  user-provided and operator-paid agents. */
+        balanceChargeFactor: resolveBalanceChargeFactor?.(usage),
         context: usageContext,
         model: usage.model ?? model,
       };
@@ -1101,6 +1115,7 @@ export function createDetachedSubagentUsageRecorder(
             byAgentId: billing.endpointTokenConfigByAgentId,
             fallback: billing.endpointTokenConfig,
           }),
+        resolveBalanceChargeFactor: billing.resolveBalanceChargeFactor,
       });
     } catch (error) {
       logger.error('[agents/usage] Failed to record detached subagent usage', error);

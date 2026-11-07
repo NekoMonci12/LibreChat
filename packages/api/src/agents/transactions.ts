@@ -35,6 +35,8 @@ interface BaseTxData {
   endpointTokenConfig?: EndpointTokenConfig;
   balance?: Partial<TCustomConfig['balance']> | null;
   transactions?: Partial<TTransactionsConfig>;
+  /** Fraction of the standard cost this spend is charged, between 0 and 1. */
+  balanceChargeFactor?: number;
 }
 
 interface StandardTxData extends BaseTxData {
@@ -88,11 +90,26 @@ export interface TxMetadata {
   balance?: Partial<TCustomConfig['balance']> | null;
   transactions?: Partial<TTransactionsConfig>;
   endpointTokenConfig?: EndpointTokenConfig;
+  /** Fraction of the standard cost this spend is charged, between 0 and 1. */
+  balanceChargeFactor?: number;
 }
 
 export interface BulkWriteDeps {
   insertMany: (docs: TransactionData[]) => Promise<unknown>;
   updateBalance: (params: { user: string; incrementValue: number }) => Promise<unknown>;
+}
+
+/**
+ * Scales a computed token value by the fraction of the standard cost this
+ * spend is charged. The standard `rate` is left untouched, so the real cost of
+ * the call stays derivable as `rawAmount * rate` while the charged amount is
+ * what debits the balance.
+ */
+function applyChargeFactor(tokenValue: number, balanceChargeFactor?: number): number {
+  if (typeof balanceChargeFactor !== 'number' || !Number.isFinite(balanceChargeFactor)) {
+    return tokenValue;
+  }
+  return tokenValue * Math.min(1, Math.max(0, balanceChargeFactor));
 }
 
 function calculateTokenValue(
@@ -109,7 +126,7 @@ function calculateTokenValue(
     tokenValue = Math.ceil(tokenValue * CANCEL_RATE);
     rate *= CANCEL_RATE;
   }
-  return { tokenValue, rate };
+  return { tokenValue: applyChargeFactor(tokenValue, txData.balanceChargeFactor), rate };
 }
 
 function calculateStructuredTokenValue(
@@ -119,7 +136,11 @@ function calculateStructuredTokenValue(
   const { tokenType, model, endpointTokenConfig, inputTokenCount } = txData;
 
   if (!tokenType) {
-    return { tokenValue: txData.rawAmount ?? 0, rate: 0, rawAmount: txData.rawAmount ?? 0 };
+    return {
+      tokenValue: applyChargeFactor(txData.rawAmount ?? 0, txData.balanceChargeFactor),
+      rate: 0,
+      rawAmount: txData.rawAmount ?? 0,
+    };
   }
 
   if (tokenType === 'prompt') {
@@ -175,7 +196,7 @@ function calculateStructuredTokenValue(
     );
 
     return {
-      tokenValue,
+      tokenValue: applyChargeFactor(tokenValue, txData.balanceChargeFactor),
       rate,
       rawAmount: -totalPromptTokens,
       rateDetail: {
@@ -202,7 +223,7 @@ function calculateStructuredTokenValue(
     rate *= CANCEL_RATE;
   }
 
-  return { tokenValue, rate, rawAmount };
+  return { tokenValue: applyChargeFactor(tokenValue, txData.balanceChargeFactor), rate, rawAmount };
 }
 
 function prepareStandardTx(

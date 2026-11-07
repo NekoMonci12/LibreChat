@@ -8,6 +8,7 @@ const {
   createBalanceReservations,
   getBalanceConfig,
   getTransactionsConfig,
+  resolveEndpointBalancePolicy,
   getModelMaxTokens,
   ATTACHMENT_ONLY_TEXT,
   isContentFilterError,
@@ -127,6 +128,14 @@ const chatV2 = async (req, res) => {
   let completedRun;
   let contentRejected = false;
   const balanceReservations = createBalanceReservations();
+  /** The assistants endpoints authenticate with their own key, so a
+   *  user-provided key means the operator does not pay for the run. The same
+   *  levers decide both what the pre-flight check reserves and what the run's
+   *  usage is later charged. */
+  const { balanceChargeFactor, bypassBalanceCheck } = resolveEndpointBalancePolicy({
+    endpoint,
+    appConfig,
+  });
 
   const getContext = () => ({
     openai,
@@ -141,7 +150,7 @@ const chatV2 = async (req, res) => {
     responseMessageId,
   });
 
-  const handleError = createErrorHandler({ req, res, getContext });
+  const handleError = createErrorHandler({ req, res, getContext, balanceChargeFactor });
 
   try {
     res.on('close', async () => {
@@ -206,6 +215,7 @@ const chatV2 = async (req, res) => {
       // Count tokens up to the current context window
       promptTokens = Math.min(promptTokens, getModelMaxTokens(model));
 
+      /** The policy resolved once at the top of the request. */
       return await checkBalance(
         {
           req,
@@ -215,6 +225,8 @@ const chatV2 = async (req, res) => {
             user: req.user.id,
             tokenType: 'prompt',
             amount: promptTokens,
+            balanceChargeFactor,
+            bypassBalanceCheck,
           },
         },
         {
@@ -612,6 +624,7 @@ const chatV2 = async (req, res) => {
           user: req.user.id,
           model: completedRun.model ?? model,
           conversationId,
+          balanceChargeFactor,
           transactions: getTransactionsConfig(req.config),
         });
       }
@@ -621,6 +634,7 @@ const chatV2 = async (req, res) => {
         user: req.user.id,
         model: response.run.model ?? model,
         conversationId,
+        balanceChargeFactor,
         transactions: getTransactionsConfig(req.config),
       });
     }

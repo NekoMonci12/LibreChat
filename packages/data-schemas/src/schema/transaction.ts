@@ -18,6 +18,8 @@ export interface ITransaction extends Document {
   createdAt?: Date;
   updatedAt?: Date;
   tenantId?: string;
+  /** Fraction of the standard cost this transaction was charged, between 0 and 1. */
+  balanceChargeFactor?: number;
 }
 
 const transactionSchema: Schema<ITransaction> = new Schema(
@@ -59,6 +61,7 @@ const transactionSchema: Schema<ITransaction> = new Schema(
       type: String,
       index: true,
     },
+    balanceChargeFactor: Number,
   },
   {
     timestamps: true,

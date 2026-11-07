@@ -11,6 +11,8 @@ export interface SpendTxData {
   balance?: { enabled?: boolean };
   transactions?: { enabled?: boolean };
   valueKey?: string;
+  /** Fraction of the standard cost these tokens are charged, between 0 and 1. */
+  balanceChargeFactor?: number;
 }
 
 export function createSpendTokensMethods(

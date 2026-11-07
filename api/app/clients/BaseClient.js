@@ -40,6 +40,7 @@ const {
   bindPrivateTextPersistenceAbort,
   persistedReasoningOverrideFields,
   isTemporaryTurn,
+  resolveEndpointBalancePolicy,
 } = require('@librechat/api');
 const {
   Constants,
@@ -1018,6 +1019,16 @@ class BaseClient {
         balanceConfig?.enabled &&
         supportsBalanceCheck[this.options.endpointType ?? this.options.endpoint]
       ) {
+        /** The provider this request actually runs on: an agent's backing
+         *  provider (the agents endpoint itself is never the provider), else
+         *  the endpoint type, else the endpoint. */
+        const balanceEndpoint =
+          this.options.agent?.endpoint ?? this.options.endpointType ?? this.options.endpoint;
+        const { balanceChargeFactor, bypassBalanceCheck } = resolveEndpointBalancePolicy({
+          endpoint: balanceEndpoint,
+          appConfig,
+          model: this.modelOptions?.model ?? this.model,
+        });
         const balanceAdmission = checkBalance(
           {
             req: this.options.req,
@@ -1029,6 +1040,8 @@ class BaseClient {
               endpoint: this.options.endpoint,
               model: this.modelOptions?.model ?? this.model,
               endpointTokenConfig: this.options.endpointTokenConfig,
+              balanceChargeFactor,
+              bypassBalanceCheck,
             },
           },
           {

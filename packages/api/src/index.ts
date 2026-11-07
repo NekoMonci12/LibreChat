@@ -71,6 +71,8 @@ export * from './crypto';
 export * from './flow/manager';
 /* Middleware */
 export * from './middleware';
+/* Balance */
+export * from './balance/byok';
 /* Security */
 export * from './security';
 /* Content protection */

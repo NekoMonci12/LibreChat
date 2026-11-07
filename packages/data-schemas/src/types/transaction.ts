@@ -14,4 +14,6 @@ export interface TransactionData {
   messageId?: string;
   inputTokenCount?: number;
   rateDetail?: Record<string, number>;
+  /** Fraction of the standard cost this transaction was charged, between 0 and 1. */
+  balanceChargeFactor?: number;
 }

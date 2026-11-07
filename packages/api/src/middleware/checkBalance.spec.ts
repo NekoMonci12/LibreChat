@@ -130,6 +130,77 @@ describe('checkBalance', () => {
     expect(deps.logViolation).not.toHaveBeenCalled();
   });
 
+  describe('BYOK charge factor', () => {
+    it('reserves the scaled token cost', async () => {
+      const deps = createMockDeps({ getMultiplier: jest.fn().mockReturnValue(2) });
+
+      await checkBalance({ req, res, txData: { ...baseTxData, balanceChargeFactor: 0.5 } }, deps);
+
+      expect(deps.reserveBalance).toHaveBeenCalledWith(expect.objectContaining({ amount: 100 }));
+    });
+
+    it('reserves the full token cost when no factor is given', async () => {
+      const deps = createMockDeps({ getMultiplier: jest.fn().mockReturnValue(2) });
+
+      await checkBalance({ req, res, txData: baseTxData }, deps);
+
+      expect(deps.reserveBalance).toHaveBeenCalledWith(expect.objectContaining({ amount: 200 }));
+    });
+
+    it('clamps an out-of-range factor to the valid range', async () => {
+      const deps = createMockDeps({ getMultiplier: jest.fn().mockReturnValue(1) });
+
+      await checkBalance({ req, res, txData: { ...baseTxData, balanceChargeFactor: 5 } }, deps);
+
+      expect(deps.reserveBalance).toHaveBeenCalledWith(expect.objectContaining({ amount: 100 }));
+    });
+
+    it('admits a free request without reserving anything', async () => {
+      const deps = createMockDeps();
+
+      const reservation = await checkBalance(
+        { req, res, txData: { ...baseTxData, balanceChargeFactor: 0 } },
+        deps,
+      );
+
+      expect(deps.reserveBalance).not.toHaveBeenCalled();
+      await reservation.release();
+      expect(deps.releaseBalanceReservation).not.toHaveBeenCalled();
+    });
+
+    it('admits a bypassed request without reserving anything', async () => {
+      const deps = createMockDeps();
+
+      const reservation = await checkBalance(
+        { req, res, txData: { ...baseTxData, bypassBalanceCheck: true } },
+        deps,
+      );
+
+      expect(deps.reserveBalance).not.toHaveBeenCalled();
+      expect(deps.logViolation).not.toHaveBeenCalled();
+      await reservation.release();
+      expect(deps.releaseBalanceReservation).not.toHaveBeenCalled();
+    });
+
+    it('admits a bypassed request that is still charged, without holding credits', async () => {
+      const deps = createMockDeps();
+
+      const reservation = await checkBalance(
+        {
+          req,
+          res,
+          txData: { ...baseTxData, balanceChargeFactor: 0.5, bypassBalanceCheck: true },
+        },
+        deps,
+      );
+
+      expect(deps.reserveBalance).not.toHaveBeenCalled();
+      expect(deps.logViolation).not.toHaveBeenCalled();
+      await reservation.release();
+      expect(deps.releaseBalanceReservation).not.toHaveBeenCalled();
+    });
+  });
+
   describe('reservation expiry', () => {
     const expiryOf = (deps: CheckBalanceDeps) => reserveRequest(deps).expiresAt.getTime();
 

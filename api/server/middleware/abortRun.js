@@ -1,4 +1,8 @@
-const { sendEvent, getTransactionsConfig } = require('@librechat/api');
+const {
+  sendEvent,
+  getTransactionsConfig,
+  resolveEndpointBalancePolicy,
+} = require('@librechat/api');
 const { logger } = require('@librechat/data-schemas');
 const { CacheKeys, RunStatus, isUUID } = require('librechat-data-provider');
 const { initializeClient } = require('~/server/services/Endpoints/assistants');
@@ -61,11 +65,18 @@ async function abortRun(req, res) {
 
   try {
     const run = await openai.beta.threads.runs.retrieve(run_id, { thread_id });
+    /** The cancelled run is billed at the same rate as the request it belongs to. */
+    const { balanceChargeFactor } = resolveEndpointBalancePolicy({
+      endpoint,
+      appConfig: req.config,
+      model: run.model,
+    });
     await recordUsage({
       ...run.usage,
       model: run.model,
       user: req.user.id,
       conversationId,
+      balanceChargeFactor,
       transactions: getTransactionsConfig(req.config),
     });
   } catch (error) {

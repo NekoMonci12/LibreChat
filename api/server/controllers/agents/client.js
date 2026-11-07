@@ -26,6 +26,8 @@ const {
   isMemoryAgentEnabled,
   recordCollectedUsage,
   resolveRunUsageContext,
+  isUserProvidedEndpoint,
+  resolveBalanceChargeFactor,
   getScheduleMCPExecution,
   createScheduledMCPPolicyRecorder,
   recordFallbackTokenUsage,
@@ -3810,6 +3812,33 @@ class AgentClient extends BaseClient {
   }
 
   /**
+   * Resolves the fraction of the standard cost a usage item is charged by its
+   * producing agent's provider (multi-endpoint graphs: connected agents +
+   * subagents). A usage row whose agent is known is charged at that agent's
+   * own factor — a graph may mix user-provided and operator-paid agents — and
+   * an untagged/unknown agent falls back to the primary agent's factor.
+   * @param {UsageMetadata} usage
+   * @returns {number} the charge factor, between 0 and 1
+   */
+  resolveAgentBalanceChargeFactor(usage, appConfig = this.options.req?.config) {
+    const balanceConfig = getBalanceConfig(appConfig);
+    const agentId = usage?.agentId;
+    const provider =
+      (agentId != null ? this.agentConfigs?.get(agentId)?.endpoint : undefined) ??
+      this.options.agent?.endpoint ??
+      this.options.endpointType ??
+      this.options.endpoint;
+    return resolveBalanceChargeFactor({
+      balanceConfig,
+      isUserProvided: isUserProvidedEndpoint({
+        endpoint: provider,
+        appConfig,
+        model: usage?.model ?? this.model,
+      }),
+    });
+  }
+
+  /**
    * @param {Object} params
    * @param {string} [params.model]
    * @param {string} [params.context='message']
@@ -3880,6 +3909,7 @@ class AgentClient extends BaseClient {
         ...(overrideTokenConfig
           ? {}
           : { resolveEndpointTokenConfig: (usage) => this.resolveAgentEndpointTokenConfig(usage) }),
+        resolveBalanceChargeFactor: (usage) => this.resolveAgentBalanceChargeFactor(usage),
       },
     );
 
@@ -4005,6 +4035,9 @@ class AgentClient extends BaseClient {
    */
   buildDetachedSubagentUsageRecorder(balance, transactions) {
     const options = this.options;
+    /** Snapshot the config the recorder reads: the recorder outlives the
+     *  request's mutable state, so it must not re-read `req.config` later. */
+    const appConfig = options?.req?.config;
     const billing = {
       user: this.user ?? options?.req?.user?.id,
       conversationId: this.conversationId,
@@ -4012,6 +4045,9 @@ class AgentClient extends BaseClient {
       model: this.model ?? options?.agent?.model_parameters?.model,
       endpointTokenConfig: options?.endpointTokenConfig,
       endpointTokenConfigByAgentId: options?.endpointTokenConfigByAgentId,
+      /** The detached child bills at its own agent's factor, so a graph may
+       *  mix user-provided and operator-paid agents. */
+      resolveBalanceChargeFactor: (usage) => this.resolveAgentBalanceChargeFactor(usage, appConfig),
     };
     return createDetachedSubagentUsageRecorder(
       {
@@ -6393,6 +6429,9 @@ class AgentClient extends BaseClient {
           conversationId: this.conversationId,
           user: this.user ?? this.options.req.user?.id,
           endpointTokenConfig: this.options.endpointTokenConfig,
+          /** The fallback bills the primary agent's call, so it carries the
+           *  primary agent's charge factor. */
+          balanceChargeFactor: this.resolveAgentBalanceChargeFactor({}),
         },
       },
     );
